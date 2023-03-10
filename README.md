@@ -1,66 +1,184 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Service Container in Laravel
+The Laravel service container is a powerful tool for managing class dependencies and performing dependency injection. Dependency injection essentially means this: class dependencies are "injected" into the class via the constructor or, in some cases, "setter" methods.
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+```php
+<?php
+namespace App\Http\Controllers;
+use App\Http\Controllers\Controller;
+use App\Repositories\UserRepository;
+use App\Models\User;
 
-## About Laravel
+class  UserController  extends  Controller
+{
+	protected  $users;
+	public  function  __construct(UserRepository  $users)
+	{
+		$this->users  =  $users;
+	}
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+	public  function  show($id)
+	{
+		$user  =  $this->users->find($id);
+		return  view('user.profile',  ['user'  =>  $user]);
+	}
+}
+```
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+In this example, the  `UserController`  needs to retrieve users from a data source. So, we will  **inject**  a service that is able to retrieve users. In this context, our  `UserRepository`  most likely uses  [Eloquent](https://laravel.com/docs/9.x/eloquent)  to retrieve user information from the database. However, since the repository is injected, we are able to easily swap it out with another implementation. We are also able to easily "mock", or create a dummy implementation of the  `UserRepository`  when testing our application.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+A deep understanding of the Laravel service container is essential to building a powerful, large application, as well as for contributing to the Laravel core itself.
 
-## Learning Laravel
+### [Zero Configuration Resolution](https://laravel.com/docs/9.x/container#zero-configuration-resolution)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+If a class has no dependencies or only depends on other concrete classes (not interfaces), the container does not need to be instructed on how to resolve that class. For example, you may place the following code in your  `routes/web.php`  file:
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+```php
+<?php
+class  Service
+{
+}
+Route::get('/', function  (Service  $service) {
+	die(get_class($service));
+});
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains over 2000 video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+In this example, hitting your application's  `/`  route will automatically resolve the  `Service`  class and inject it into your route's handler.
 
-## Laravel Sponsors
+Thankfully, many of the classes you will be writing when building a Laravel application automatically receive their dependencies via the container, including  [controllers](https://laravel.com/docs/9.x/controllers),  [event listeners](https://laravel.com/docs/9.x/events),  [middleware](https://laravel.com/docs/9.x/middleware), and more.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the Laravel [Patreon page](https://patreon.com/taylorotwell).
 
-### Premium Partners
+### [When To Use The Container](https://laravel.com/docs/9.x/container#when-to-use-the-container)
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Cubet Techno Labs](https://cubettech.com)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[Many](https://www.many.co.uk)**
-- **[Webdock, Fast VPS Hosting](https://www.webdock.io/en)**
-- **[DevSquad](https://devsquad.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[OP.GG](https://op.gg)**
-- **[WebReinvent](https://webreinvent.com/?utm_source=laravel&utm_medium=github&utm_campaign=patreon-sponsors)**
-- **[Lendio](https://lendio.com)**
+You will often type-hint dependencies on routes, controllers, event listeners, and elsewhere without ever manually interacting with the container. For example, you might type-hint the  `Illuminate\Http\Request`  object on your route definition so that you can easily access the current request. Even though we never have to interact with the container to write this code, it is managing the injection of these dependencies behind the scenes:
 
-## Contributing
+```php
+use Illuminate\Http\Request;
+Route::get('/', function  (Request  $request) {
+	// ...
+});
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+In many cases, thanks to automatic dependency injection and  [facades](https://laravel.com/docs/9.x/facades), you can build Laravel applications without  **ever**  manually binding or resolving anything from the container.  **So, when would you ever manually interact with the container?**  Let's examine two situations.
 
-## Code of Conduct
+First, if you write a class that implements an interface and you wish to type-hint that interface on a route or class constructor, you must  tell the container how to resolve that interface. Secondly, if you are  [writing a Laravel package](https://laravel.com/docs/9.x/packages)  that you plan to share with other Laravel developers, you may need to bind your package's services into the container.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## [1. Binding](https://laravel.com/docs/9.x/container#binding)
 
-## Security Vulnerabilities
+### [Binding Basics](https://laravel.com/docs/9.x/container#binding-basics)
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+#### [Simple Bindings](https://laravel.com/docs/9.x/container#simple-bindings)
 
-## License
+Almost all of your service container bindings will be registered within  [service providers](https://laravel.com/docs/9.x/providers), so most of these examples will demonstrate using the container in that context.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Within a service provider, you always have access to the container via the  `$this->app`  property. We can register a binding using the  `bind`  method, passing the class or interface name that we wish to register along with a closure that returns an instance of the class:
+
+```php
+use App\Billing\PaymentGateway;
+
+$this->app()->bind(PaymentGateway::class, function($app){
+	return new PaymentGateway('USD');
+});
+```
+
+Note that we receive the container itself as an argument to the resolver. We can then use the container to resolve sub-dependencies of the object we are building.
+
+You may do so via the  `App`  [facade](https://laravel.com/docs/9.x/facades):
+
+```
+App::bind(PaymentGateway::class, function($app){
+	return new PaymentGateway('USD');
+});
+```
+
+
+> There is no need to bind classes into the container if they do not depend on any interfaces. The container does not need to be instructed on how to build these objects, since it can automatically resolve these objects using reflection.
+
+#### [Binding A Singleton](https://laravel.com/docs/9.x/container#binding-a-singleton)
+
+The  `singleton`  method binds a class or interface into the container that should only be resolved one time. Once a singleton binding is resolved, the same object instance will be returned on subsequent calls into the container:
+
+```php
+// Interface
+interface PaymentGatewayContract
+{
+	public function charge($amount);
+	public function setDiscount($amount);
+}
+
+// Concrete class
+class BankPaymentGateway implements PaymentGatewayContract
+{
+	private $discount;
+	public function setDiscount($amount)
+	{
+		$this->discount = $amount;
+	}
+}
+
+// Provider
+app()->bind(PaymentGatewayContract::class, function($app){
+	return new BankPaymentGateway('USD');
+});
+
+// Controller
+public function store(OrderDetails $orderDetails, PaymentGatewayContract $paymentGatewayContract)
+{
+	$orderDetails->all();
+	dd($paymentGatewayContract->charge(2500));
+}
+
+// Order details class
+public function __construct(PaymentGatewayContract $paymentGateway)
+{
+	$this->paymentGateway = $paymentGateway;
+}
+public function all()
+{
+	$this->paymentGateway->setDiscount(500);
+	return [
+		'name' => 'Ameer',
+		'address' => 'Mohakhali, Dhaka'
+	];
+}
+```
+If you bind this above method in the service provider and also called a dependency injection into the controller and another dependency in OrderDetails class that should be created by same instance then you get error. Because you have created two different instance at a time and expect to behave like a single instance in the Controller and OrderDetails class.
+
+In this situation you have to use singleton in the provider. A singleton is a class that allows only a single instance of itself to be created and gives access to that created instance.
+
+
+#### [Binding Scoped Singletons](https://laravel.com/docs/9.x/container#binding-scoped)
+
+The  `scoped`  method binds a class or interface into the container that should only be resolved one time within a given Laravel request / job lifecycle. While this method is similar to the  `singleton`  method, instances registered using the  `scoped`  method will be flushed whenever the Laravel application starts a new "lifecycle", such as when a  [Laravel Octane](https://laravel.com/docs/9.x/octane)  worker processes a new request or when a Laravel  [queue worker](https://laravel.com/docs/9.x/queues)  processes a new job:
+
+```php
+$this->app->scoped(Transistor::class, function  (Application  $app) {
+	return  new  Transistor($app->make(PodcastParser::class));
+});
+```
+
+### [2. Binding Interfaces To Implementations](https://laravel.com/docs/9.x/container#binding-interfaces-to-implementations)
+
+A very powerful feature of the service container is its ability to bind an interface to a given implementation. For example, in the above example we create an interface like `PaymentGatewayContract` and binding it into the service provider.
+
+
+## [Resolving](https://laravel.com/docs/9.x/container#resolving)
+
+### [The  `make`  Method](https://laravel.com/docs/9.x/container#the-make-method)
+
+You may use the  `make`  method to resolve a class instance from the container. The  `make`  method accepts the name of the class or interface you wish to resolve:
+
+```php
+$transistor = $this->app->make(Transistor::class);
+```
+
+If some of your class' dependencies are not resolvable via the container, you may inject them by passing them as an associative array into the  `makeWith`  method. For example, we may manually pass the  `$id`  constructor argument required by the  `Transistor`  service:
+
+```php
+$transistor = $this->app->makeWith(Transistor::class, ['id'  =>  1]);
+```
+
+If you are outside of a service provider in a location of your code that does not have access to the  `$app`  variable, you may use the  `App`  [facade](https://laravel.com/docs/9.x/facades)  or the  `app`  [helper](https://laravel.com/docs/9.x/helpers#method-app)  to resolve a class instance from the container:
+
+```php
+$transistor = App::make(Transistor::class);
+```
